@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Snake</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <header class="game-header">
+            <div class="score-display">
+                <span class="label">SCORE</span>
+                <span id="current-score" class="value">0</span>
+            </div>
+            <div class="level-display">
+                <span class="label">LEVEL</span>
+                <span id="current-level" class="value">1</span>
+            </div>
+            <div class="high-score-display">
+                <span class="label">HIGH SCORE</span>
+                <span id="high-score" class="value">0</span>
+            </div>
+        </header>
+
+        <main class="canvas-container">
+            <canvas id="gameCanvas" width="600" height="600"></canvas>
+            
+            <div id="level-transition-overlay" class="overlay hidden">
+                <h1 class="glow-text">LEVEL <span id="transition-level-num">2</span></h1>
+                <p>Speed increased. More obstacles.</p>
+                <button id="next-level-btn" class="glass-btn primary-btn">START LEVEL</button>
+            </div>
+            
+            <div id="start-overlay" class="overlay active">
+                <h1 class="glow-text">NEON<br>SNAKE</h1>
+                <p>Use Arrow Keys or WASD to move.</p>
+                <div class="speed-control">
+                    <label for="speed-slider">Speed: <span id="speed-display">Normal</span></label>
+                    <input type="range" id="speed-slider" min="1" max="3" value="2">
+                </div>
+                <button id="start-btn" class="glass-btn primary-btn">PLAY NOW</button>
+            </div>
+
+            <div id="game-over-overlay" class="overlay hidden">
+                <h1 class="glow-text error-text">GAME OVER</h1>
+                <p class="final-score">Score: <span id="final-score-value">0</span></p>
+                <button id="restart-btn" class="glass-btn primary-btn">PLAY AGAIN</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
