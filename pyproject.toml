@@ -1,0 +1,17 @@
+[project]
+name = "snake-game"
+version = "0.1.0"
+description = "A real-time multiplayer snake game using WebSockets"
+authors = [
+    { name = "roopashenoymallaya", email = "roopashenoy19@gmail.com" }
+]
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.103.0",
+    "uvicorn>=0.23.2",
+    "websockets>=11.0.3"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
