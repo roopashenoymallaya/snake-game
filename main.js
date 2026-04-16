@@ -2,231 +2,188 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const scoreElement = document.getElementById('current-score');
-const highScoreElement = document.getElementById('high-score');
 const startOverlay = document.getElementById('start-overlay');
+const lobbyOverlay = document.getElementById('lobby-overlay');
 const gameOverOverlay = document.getElementById('game-over-overlay');
 const finalScoreElement = document.getElementById('final-score-value');
-const startBtn = document.getElementById('start-btn');
+const errorMsg = document.getElementById('error-msg');
+const createRoomBtn = document.getElementById('create-room-btn');
+const joinRoomBtn = document.getElementById('join-room-btn');
+const startGameBtn = document.getElementById('start-game-btn');
+const roomCodeInput = document.getElementById('room-code-input');
+const lobbyRoomCode = document.getElementById('lobby-room-code');
+const playersList = document.getElementById('players-list');
 const restartBtn = document.getElementById('restart-btn');
 const speedSlider = document.getElementById('speed-slider');
 const speedDisplay = document.getElementById('speed-display');
-const nextLevelBtn = document.getElementById('next-level-btn');
-const levelTransitionOverlay = document.getElementById('level-transition-overlay');
-const transitionLevelNum = document.getElementById('transition-level-num');
 
-speedSlider.addEventListener('input', (e) => {
-    const v = parseInt(e.target.value);
-    if (v === 1) speedDisplay.textContent = 'Slow';
-    if (v === 2) speedDisplay.textContent = 'Normal';
-    if (v === 3) speedDisplay.textContent = 'Fast';
-});
+if (speedSlider) {
+    speedSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value);
+        if (v === 1) speedDisplay.textContent = 'Slow';
+        if (v === 2) speedDisplay.textContent = 'Normal';
+        if (v === 3) speedDisplay.textContent = 'Fast';
+    });
+}
 
-// Game constants
 const CELL_SIZE = 20;
 const GRID_WIDTH = canvas.width / CELL_SIZE;
 const GRID_HEIGHT = canvas.height / CELL_SIZE;
 
-// Colors
-const SNAKE_HEAD_COLOR = '#ff007f'; // Pink
-const SNAKE_BODY_COLOR = '#8a2be2'; // Purple
 const FOOD_COLOR = '#00f3ff';       // Cyan
 const OBSTACLE_COLOR = '#4a0e4e';   // Dark purple/red
 
-// Game state
-let snake = [];
-let direction = { x: 1, y: 0 };
-let nextDirection = { x: 1, y: 0 };
-let food = { x: 0, y: 0 };
-let obstacles = [];
-let score = 0;
-let highScore = localStorage.getItem('snakeHighScore') || 0;
-let currentLevel = 1;
-let foodsEatenInLevel = 0;
-const FOODS_PER_LEVEL = 5;
-const levelElement = document.getElementById('current-level');
-let baseSpeed = 150; // ms per frame initially
-let currentSpeed = baseSpeed;
-let lastRenderTime = 0;
-let isGameOver = false;
+let socket = null;
+let currentRoomId = null;
+let localSocketId = null;
+let gameState = null;
 let isPlaying = false;
-let animationFrameId;
+let isGameOver = false;
 
-highScoreElement.textContent = highScore;
-
-function initGame() {
-    snake = [
-        { x: 10, y: 15 },
-        { x: 9, y: 15 },
-        { x: 8, y: 15 }
-    ];
-    direction = { x: 1, y: 0 };
-    nextDirection = { x: 1, y: 0 };
-    score = 0;
-    obstacles = [];
-    currentLevel = 1;
-    foodsEatenInLevel = 0;
-    if (levelElement) levelElement.textContent = currentLevel;
-
-    const sliderVal = parseInt(speedSlider.value);
-    if (sliderVal === 1) baseSpeed = 250;
-    else if (sliderVal === 2) baseSpeed = 150;
-    else if (sliderVal === 3) baseSpeed = 80;
-
-    currentSpeed = baseSpeed;
-    isGameOver = false;
-    updateScoreDisplay();
-    spawnFood();
-}
-
-function spawnFood() {
-    let validPosition = false;
-    while (!validPosition) {
-        food = {
-            x: Math.floor(Math.random() * GRID_WIDTH),
-            y: Math.floor(Math.random() * GRID_HEIGHT)
+async function connectWebSocket() {
+    return new Promise((resolve) => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+        
+        socket.onopen = () => {
+            console.log("Connected to server");
+            resolve();
         };
-        // Check if food spawns on snake or obstacles
-        validPosition = !snake.some(segment => segment.x === food.x && segment.y === food.y) &&
-                        !obstacles.some(obs => obs.x === food.x && obs.y === food.y);
-    }
-}
 
-function spawnObstacle() {
-    let validPosition = false;
-    let attempts = 0;
-    while (!validPosition && attempts < 100) {
-        let obs = {
-            x: Math.floor(Math.random() * GRID_WIDTH),
-            y: Math.floor(Math.random() * GRID_HEIGHT)
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
         };
         
-        // Prevent spawning an obstacle on snake, food, or in front of snake head
-        let head = snake[0];
-        let inFront = { x: head.x + direction.x, y: head.y + direction.y };
-        // wrap in front
-        inFront.x = (inFront.x + GRID_WIDTH) % GRID_WIDTH;
-        inFront.y = (inFront.y + GRID_HEIGHT) % GRID_HEIGHT;
+        socket.onclose = () => {
+            console.log("Disconnected from server");
+        };
+    });
+}
 
-        validPosition = !snake.some(segment => segment.x === obs.x && segment.y === obs.y) &&
-                        !(food.x === obs.x && food.y === obs.y) &&
-                        !(inFront.x === obs.x && inFront.y === obs.y) &&
-                        !obstacles.some(existing => existing.x === obs.x && existing.y === obs.y);
+function handleServerMessage(data) {
+    if (data.type === 'roomCreated') {
+        currentRoomId = data.roomId;
+        lobbyRoomCode.textContent = currentRoomId;
+    } else if (data.type === 'roomJoined') {
+        currentRoomId = data.state.roomId;
+        localSocketId = data.socketId;
+        gameState = data.state;
+        lobbyRoomCode.textContent = currentRoomId;
+        errorMsg.textContent = "";
         
-        if (validPosition) {
-            obstacles.push(obs);
+        startOverlay.classList.remove('active');
+        startOverlay.classList.add('hidden');
+        gameOverOverlay.classList.remove('active');
+        gameOverOverlay.classList.add('hidden');
+        
+        if (gameState.status === 'playing') {
+            isPlaying = true;
+            lobbyOverlay.classList.remove('active');
+            lobbyOverlay.classList.add('hidden');
+            errorMsg.textContent = "";
+        } else {
+            lobbyOverlay.classList.remove('hidden');
+            lobbyOverlay.classList.add('active');
         }
-        attempts++;
+        
+        updateLobbyPlayers();
+    } else if (data.type === 'gameStarted') {
+        lobbyOverlay.classList.remove('active');
+        lobbyOverlay.classList.add('hidden');
+        isPlaying = true;
+        isGameOver = false;
+        errorMsg.textContent = "";
+    } else if (data.type === 'gameUpdate') {
+        gameState = data.state;
+        if (lobbyOverlay.classList.contains('active')) {
+            updateLobbyPlayers();
+        }
+        if (isPlaying) {
+            draw();
+            updateScoreDisplay();
+            checkLocalPlayerStatus();
+        }
+    } else if (data.type === 'gameOver') {
+        if (data.playerId === localSocketId) {
+            triggerGameOver();
+        }
+    } else if (data.type === 'error') {
+        errorMsg.textContent = data.message;
     }
 }
+
+function updateLobbyPlayers() {
+    playersList.innerHTML = '';
+    const ids = Object.keys(gameState.players);
+    ids.forEach((id, index) => {
+        const p = gameState.players[id];
+        const div = document.createElement('div');
+        div.textContent = `Player ${index + 1} ${id === localSocketId ? '(You)' : ''}`;
+        div.style.color = p.color;
+        div.style.fontWeight = 'bold';
+        div.style.fontSize = '1.2em';
+        div.style.margin = '5px 0';
+        playersList.appendChild(div);
+    });
+}
+
+createRoomBtn.addEventListener('click', async () => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) await connectWebSocket();
+    socket.send(JSON.stringify({ type: 'createRoom', speed: speedSlider ? parseInt(speedSlider.value) : 2 }));
+});
+
+joinRoomBtn.addEventListener('click', async () => {
+    const code = roomCodeInput.value.trim();
+    if (!code) {
+        errorMsg.textContent = "Please enter a code";
+        return;
+    }
+    if (!socket || socket.readyState !== WebSocket.OPEN) await connectWebSocket();
+    socket.send(JSON.stringify({ type: 'joinRoom', roomId: code }));
+});
+
+startGameBtn.addEventListener('click', () => {
+    if (socket) {
+        socket.send(JSON.stringify({ type: 'startGame' }));
+    }
+});
+
+restartBtn.addEventListener('click', () => {
+    // Navigate back to lobby creation instead of auto restart since room might be gone
+    window.location.reload();
+});
 
 window.addEventListener('keydown', e => {
+    if (!isPlaying || isGameOver) return;
+    
+    let dir = null;
     switch(e.key) {
         case 'ArrowUp':
         case 'w':
         case 'W':
-            if (direction.y === 0) nextDirection = { x: 0, y: -1 };
+            dir = { x: 0, y: -1 };
             break;
         case 'ArrowDown':
         case 's':
         case 'S':
-            if (direction.y === 0) nextDirection = { x: 0, y: 1 };
+            dir = { x: 0, y: 1 };
             break;
         case 'ArrowLeft':
         case 'a':
         case 'A':
-            if (direction.x === 0) nextDirection = { x: -1, y: 0 };
+            dir = { x: -1, y: 0 };
             break;
         case 'ArrowRight':
         case 'd':
         case 'D':
-            if (direction.x === 0) nextDirection = { x: 1, y: 0 };
+            dir = { x: 1, y: 0 };
             break;
     }
+    if (dir && socket) {
+        socket.send(JSON.stringify({ type: 'changeDirection', direction: dir }));
+    }
 });
-
-function update() {
-    if (isGameOver) return;
-
-    direction = nextDirection;
-    
-    const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-
-    // Wall Wrapping
-    head.x = (head.x + GRID_WIDTH) % GRID_WIDTH;
-    head.y = (head.y + GRID_HEIGHT) % GRID_HEIGHT;
-
-    // Check collision with self
-    if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
-        triggerGameOver();
-        return;
-    }
-
-    // Check collision with obstacles
-    if (obstacles.some(obs => obs.x === head.x && obs.y === head.y)) {
-        triggerGameOver();
-        return;
-    }
-
-    snake.unshift(head);
-
-    // Check food consumption
-    if (head.x === food.x && head.y === food.y) {
-        score += 10;
-        updateScoreDisplay();
-        
-        foodsEatenInLevel++;
-        if (foodsEatenInLevel >= FOODS_PER_LEVEL) {
-            levelUp();
-        }
-
-        spawnFood();
-    } else {
-        snake.pop(); // Remove tail
-    }
-}
-
-function triggerGameOver() {
-    isGameOver = true;
-    isPlaying = false;
-    
-    if (score > highScore) {
-        highScore = score;
-        localStorage.setItem('snakeHighScore', highScore);
-        highScoreElement.textContent = highScore;
-    }
-    
-    finalScoreElement.textContent = score;
-    gameOverOverlay.classList.remove('hidden');
-    gameOverOverlay.classList.add('active');
-}
-
-function levelUp() {
-    currentLevel++;
-    foodsEatenInLevel = 0;
-    if (levelElement) levelElement.textContent = currentLevel;
-    
-    // Speed up upon leveling up
-    if (currentSpeed > 50) {
-        currentSpeed -= 15;
-    }
-
-    isPlaying = false;
-    
-    if (levelTransitionOverlay) {
-        transitionLevelNum.textContent = currentLevel;
-        levelTransitionOverlay.classList.remove('hidden');
-        levelTransitionOverlay.classList.add('active');
-    }
-}
-
-function updateScoreDisplay() {
-    scoreElement.textContent = score;
-    
-    // Add pop animation class
-    scoreElement.classList.remove('pop');
-    void scoreElement.offsetWidth; // Trigger reflow
-    scoreElement.classList.add('pop');
-}
 
 function drawRectWithGlow(x, y, color, blur, shadowColor) {
     ctx.fillStyle = color;
@@ -236,37 +193,80 @@ function drawRectWithGlow(x, y, color, blur, shadowColor) {
     ctx.shadowBlur = 0; // Reset
 }
 
+function updateScoreDisplay() {
+    if (!gameState) return;
+    const p = gameState.players[localSocketId];
+    if (p) {
+        scoreElement.textContent = p.score;
+        scoreElement.classList.remove('pop');
+        void scoreElement.offsetWidth; // Trigger reflow
+        scoreElement.classList.add('pop');
+    }
+}
+
+function checkLocalPlayerStatus() {
+    if (!gameState || isGameOver) return;
+    const p = gameState.players[localSocketId];
+    if (p && !p.isAlive) {
+        triggerGameOver();
+    }
+}
+
+function triggerGameOver() {
+    isGameOver = true;
+    isPlaying = false;
+    
+    if (gameState && gameState.players[localSocketId]) {
+        finalScoreElement.textContent = gameState.players[localSocketId].score;
+    }
+    
+    gameOverOverlay.classList.remove('hidden');
+    gameOverOverlay.classList.add('active');
+}
+
 function draw() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!gameState) return;
 
     // Draw obstacles
-    obstacles.forEach(obs => {
+    gameState.obstacles.forEach(obs => {
         drawRectWithGlow(obs.x, obs.y, OBSTACLE_COLOR, 15, '#ff0000');
     });
 
-    // Draw snake tail (gradient effect)
-    for (let i = 1; i < snake.length; i++) {
-        const opacity = 1 - (i / (snake.length * 2)); // Fading tail
-        const color = `rgba(138, 43, 226, ${opacity})`;
-        drawRectWithGlow(snake[i].x, snake[i].y, color, 10, SNAKE_BODY_COLOR);
-    }
-    
-    // Draw snake head
-    drawRectWithGlow(snake[0].x, snake[0].y, SNAKE_HEAD_COLOR, 20, SNAKE_HEAD_COLOR);
+    // Draw snake for each player
+    Object.values(gameState.players).forEach(p => {
+        if (!p.isAlive) return;
+        
+        const snake = p.snake;
+        const color = p.color;
+        
+        // Draw snake tail (gradient effect)
+        for (let i = 1; i < snake.length; i++) {
+            const opacity = Math.max(0.2, 1 - (i / (snake.length * 2))); 
+            // Instead of parsing hex to rgba manually, we just set globalAlpha
+            ctx.globalAlpha = opacity;
+            drawRectWithGlow(snake[i].x, snake[i].y, color, 10, color);
+            ctx.globalAlpha = 1.0;
+        }
+        
+        // Draw snake head
+        if(snake.length > 0) {
+            drawRectWithGlow(snake[0].x, snake[0].y, color, 20, '#ffffff');
+        }
+    });
 
     // Draw food with pulsing radius
     const time = Date.now() / 200;
     const pulseBlur = 15 + Math.sin(time) * 5;
     
-    // Draw food as circle
     ctx.fillStyle = FOOD_COLOR;
     ctx.shadowBlur = pulseBlur;
     ctx.shadowColor = FOOD_COLOR;
     ctx.beginPath();
     ctx.arc(
-        food.x * CELL_SIZE + CELL_SIZE / 2, 
-        food.y * CELL_SIZE + CELL_SIZE / 2, 
+        gameState.food.x * CELL_SIZE + CELL_SIZE / 2, 
+        gameState.food.y * CELL_SIZE + CELL_SIZE / 2, 
         (CELL_SIZE / 2) - 2, 
         0, 
         Math.PI * 2
@@ -275,74 +275,5 @@ function draw() {
     ctx.shadowBlur = 0;
 }
 
-function gameLoop(currentTime) {
-    if (isPlaying) {
-        animationFrameId = requestAnimationFrame(gameLoop);
-        
-        const secondsSinceLastRender = (currentTime - lastRenderTime);
-        if (secondsSinceLastRender < currentSpeed) {
-            return;
-        }
-
-        lastRenderTime = currentTime;
-        
-        update();
-        draw();
-    }
-}
-
-function startGame() {
-    initGame();
-    startOverlay.classList.remove('active');
-    startOverlay.classList.add('hidden');
-    gameOverOverlay.classList.remove('active');
-    gameOverOverlay.classList.add('hidden');
-    
-    isPlaying = true;
-    lastRenderTime = window.performance.now();
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = requestAnimationFrame(gameLoop);
-}
-
-startBtn.addEventListener('click', startGame);
-restartBtn.addEventListener('click', () => {
-    gameOverOverlay.classList.remove('active');
-    gameOverOverlay.classList.add('hidden');
-    startOverlay.classList.remove('hidden');
-    startOverlay.classList.add('active');
-});
-
-function startNextLevel() {
-    // Reset snake
-    snake = [
-        { x: 10, y: 15 },
-        { x: 9, y: 15 },
-        { x: 8, y: 15 }
-    ];
-    direction = { x: 1, y: 0 };
-    nextDirection = { x: 1, y: 0 };
-    
-    // Set level obstacles
-    obstacles = [];
-    for (let i = 0; i < currentLevel; i++) {
-        spawnObstacle();
-    }
-    
-    spawnFood();
-    
-    levelTransitionOverlay.classList.remove('active');
-    levelTransitionOverlay.classList.add('hidden');
-    
-    isPlaying = true;
-    lastRenderTime = window.performance.now();
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = requestAnimationFrame(gameLoop);
-}
-
-if (nextLevelBtn) {
-    nextLevelBtn.addEventListener('click', startNextLevel);
-}
-
-// Draw initial state behind start menu
-initGame();
+// Draw initial empty grid or default state
 draw();

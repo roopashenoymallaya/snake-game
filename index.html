@@ -35,12 +35,27 @@
             
             <div id="start-overlay" class="overlay active">
                 <h1 class="glow-text">NEON<br>SNAKE</h1>
-                <p>Use Arrow Keys or WASD to move.</p>
-                <div class="speed-control">
-                    <label for="speed-slider">Speed: <span id="speed-display">Normal</span></label>
-                    <input type="range" id="speed-slider" min="1" max="3" value="2">
+                <p>Multiplayer Experience</p>
+                <div class="speed-control" style="margin-top: 15px; margin-bottom: 20px;">
+                    <label for="speed-slider" style="font-size: 0.9em; opacity: 0.8; letter-spacing: 1px;">GAME SPEED: <span id="speed-display" style="color: #00f3ff;">Normal</span></label>
+                    <input type="range" id="speed-slider" min="1" max="3" value="2" style="width: 100%; max-width: 200px; display: block; margin: 10px auto;">
                 </div>
-                <button id="start-btn" class="glass-btn primary-btn">PLAY NOW</button>
+                <div class="room-controls" style="margin-top: 10px;">
+                    <button id="create-room-btn" class="glass-btn primary-btn">CREATE ROOM</button>
+                    <p style="margin: 15px 0; font-size: 0.9em; opacity: 0.7;">OR</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+                        <input type="text" id="room-code-input" placeholder="CODE" maxlength="4" style="width: 80px; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white; text-align: center; text-transform: uppercase; font-family: 'Outfit';">
+                        <button id="join-room-btn" class="glass-btn">JOIN</button>
+                    </div>
+                </div>
+                <p id="error-msg" style="color: #ff0055; margin-top: 10px; height: 20px; font-size: 0.9em;"></p>
+            </div>
+
+            <div id="lobby-overlay" class="overlay hidden">
+                <h1 class="glow-text">LOBBY</h1>
+                <h2>Room Code: <span id="lobby-room-code" style="color: #00f3ff; letter-spacing: 5px;">----</span></h2>
+                <div id="players-list" style="margin: 20px 0;"></div>
+                <button id="start-game-btn" class="glass-btn primary-btn" style="margin-top: 10px;">START GAME</button>
             </div>
 
             <div id="game-over-overlay" class="overlay hidden">
